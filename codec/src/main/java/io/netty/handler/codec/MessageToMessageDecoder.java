@@ -48,6 +48,8 @@ import java.util.List;
  * are of type {@link ReferenceCounted}. This is needed as the {@link MessageToMessageDecoder} will call
  * {@link ReferenceCounted#release()} on decoded messages.
  *
+ *   消息解码器: 二次解码器，用于将一个对象二次解码为其他对象
+ *
  */
 public abstract class MessageToMessageDecoder<I> extends ChannelInboundHandlerAdapter {
 
@@ -77,10 +79,14 @@ public abstract class MessageToMessageDecoder<I> extends ChannelInboundHandlerAd
         return matcher.match(msg);
     }
 
+    /**
+     *   解码的主要逻辑
+     */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         CodecOutputList out = CodecOutputList.newInstance();
         try {
+            //1. 如果读取的消息为当前解码器解码的类型则处理
             if (acceptInboundMessage(msg)) {
                 @SuppressWarnings("unchecked")
                 I cast = (I) msg;
@@ -89,6 +95,7 @@ public abstract class MessageToMessageDecoder<I> extends ChannelInboundHandlerAd
                 } finally {
                     ReferenceCountUtil.release(cast);
                 }
+             //2. 否则，直接添加到 out集合 中
             } else {
                 out.add(msg);
             }
@@ -97,6 +104,7 @@ public abstract class MessageToMessageDecoder<I> extends ChannelInboundHandlerAd
         } catch (Exception e) {
             throw new DecoderException(e);
         } finally {
+            //3. 如果解码出数据，则通知下一个处理器进行处理
             try {
                 int size = out.size();
                 for (int i = 0; i < size; i++) {

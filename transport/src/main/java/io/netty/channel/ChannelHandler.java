@@ -174,6 +174,15 @@ import java.lang.annotation.Target;
  * {@link ChannelPipeline} to find out more about inbound and outbound operations,
  * what fundamental differences they have, how they flow in a  pipeline,  and how to handle
  * the operation in your application.
+ *
+ *   处理一个IO事件或者拦截一个IO操作，然后转发请求到通道中的下一个Handler
+ *      该类支持的注解如下:
+ *          @Sharable: 多个 ChannelPipeline 共用同一个 Handler
+ *          @Skip: 注解的方法不会被调用
+ *   主要分类
+ *      1. 系统 ChannelHandler ，用于IO操作和对事件预处理，对于用户不可见。
+ *      2. 编解码 ChannelHandler
+ *      3. 其他功能性 ChannelHandler, 例如心跳检测、读写超时、日志等等
  */
 public interface ChannelHandler {
 

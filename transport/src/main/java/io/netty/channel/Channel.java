@@ -73,6 +73,20 @@ import java.net.SocketAddress;
  * It is important to call {@link #close()} or {@link #close(ChannelPromise)} to release all
  * resources once you are done with the {@link Channel}. This ensures all resources are
  * released in a proper way, i.e. filehandles.
+ *
+ *  为什么 Netty 不使用原生的 java.nio.channel :
+ *      1. SocketChannel 和 ServerSocketChannel 没有统一的 Channel 接口供业务开发这使用，对于用户而言，没有统一的操作视图，使用不方便
+ *      2. SocketChannel 和 ServerSocketChannel 的主要职责就是网络IO, 由于它们是SPI接口，由具体的虚拟机厂家提供，所以通过继承 SPI 功能类
+ *      扩展功能的嫩度很大， 直接实现这两个抽象类，其工作量和开发一个新的 channel 功能类差不多。
+ *      3. Netty 的 channel 能与 Netty 的整体架构融合再一起，例如 IO模型、基于 ChannelPiple 的定制模型、以及基于元数据描述配置化的TCP参数等，
+ *      这些 JDK 的 Channel 都没有提供， 需要重新封装。
+ *      4. 自定义的 Channel 功能更灵活。
+ *
+ *   Netty Channel 接口的设计理念
+ *      1. 在 Channel 接口层，采用外观模式进行统一封装， 将网络IO操作、网络IO相关的其他操作封装起来，同一对外提供。
+ *      2. Channel 接口的定义尽量大而全，为  SocketChannel 和 ServerSocketChannel  提供了统一的视图，由不同的子类实现不同的功能，公共功能
+ *      在父类中提供，最大程度的实现了功能和接口的重用。
+ *      3. 采用聚合而非包含的方式，将相关的功能类聚合在Channel 中，由 Channel 负责统一分配和调度，功能实现更加灵活。
  */
 public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparable<Channel> {
 
@@ -83,6 +97,8 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
 
     /**
      * Return the {@link EventLoop} this {@link Channel} was registered to.
+     *
+     *   返回注册绑定当前通道的事件组
      */
     EventLoop eventLoop();
 
@@ -91,31 +107,43 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      *
      * @return the parent channel.
      *         {@code null} if this channel does not have a parent channel.
+     *
+     *     返回当前通道的父通道，例如 服务端的 SocketChannel
      */
     Channel parent();
 
     /**
      * Returns the configuration of this channel.
+     *
+     *    返回针对当前通道的配置，比如连接超时事件、发送或者接收缓冲区等等
      */
     ChannelConfig config();
 
     /**
      * Returns {@code true} if the {@link Channel} is open and may get active later
+     *
+     *   返回当前通道是否已经打开
      */
     boolean isOpen();
 
     /**
      * Returns {@code true} if the {@link Channel} is registered with an {@link EventLoop}.
+     *
+     *    返回当前通道是否已经注册到事件组中
      */
     boolean isRegistered();
 
     /**
      * Return {@code true} if the {@link Channel} is active and so connected.
+     *
+     *   返回当前通道是否已经连接成功
      */
     boolean isActive();
 
     /**
      * Return the {@link ChannelMetadata} of the {@link Channel} which describe the nature of the {@link Channel}.
+     *
+     *   返回描述原始 Channel 的元信息
      */
     ChannelMetadata metadata();
 
@@ -127,6 +155,8 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      *
      * @return the local address of this channel.
      *         {@code null} if this channel is not bound.
+     *
+     *
      */
     SocketAddress localAddress();
 
@@ -205,6 +235,8 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      *   <li>{@link #deregister(ChannelPromise)}</li>
      *   <li>{@link #voidPromise()}</li>
      * </ul>
+     *
+     *   Unsafe 接口不应该被用户代码直接调用，而是作为辅助类，实际上IO操作都是由该接口完成的
      */
     interface Unsafe {
 

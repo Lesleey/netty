@@ -24,6 +24,12 @@ import io.netty.util.ReferenceCounted;
 
 /**
  * Common logic for {@link ReferenceCounted} implementations
+ *
+ *  ReferenceCounted 实现类的通用逻辑
+ *      实现类注意：
+ *          对于该字段 refCnt 的更新
+ *              如果该字段为偶数，则真实的引用计数为 refCnt >>> 1
+ *              如果为计数，则真实的引用计数为 0
  */
 public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
     /*
@@ -32,7 +38,7 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
      * For the updated int field:
      *   Even => "real" refcount is (refCnt >>> 1)
      *   Odd  => "real" refcount is 0
-     *
+     *  todo lesleey RefCount 为什么要这么设计!
      * (x & y) appears to be surprisingly expensive relative to (x == y). Thus this class uses
      * a fast-path in some places for most common low values when checking for live (even) refcounts,
      * for example: if (rawCnt == 2 || rawCnt == 4 || (rawCnt & 1) == 0) { ...
@@ -40,6 +46,9 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
 
     protected ReferenceCountUpdater() { }
 
+    /*
+     *  获取 fieldName 字段在 clz 类中的内存地址，用于 AtomicIntegerFieldUpdater 类通过原子的方式进行更新
+     */
     public static long getUnsafeOffset(Class<? extends ReferenceCounted> clz, String fieldName) {
         try {
             if (PlatformDependent.hasUnsafe()) {
@@ -59,6 +68,9 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
         return 2;
     }
 
+    /*
+     * 根据记录的 refCnt 获取真实的 引用数
+     */
     private static int realRefCnt(int rawCnt) {
         return rawCnt != 2 && rawCnt != 4 && (rawCnt & 1) != 0 ? 0 : rawCnt >>> 1;
     }
@@ -116,13 +128,19 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
         return retain0(instance, increment, rawIncrement);
     }
 
+    /*
+     *    increment 该实例新增的引用数量, rawIncrement = increment * 2
+     */
     // rawIncrement == increment << 1
     private T retain0(T instance, final int increment, final int rawIncrement) {
+        //1. 原子的设置 refCnt 字段的值
         int oldRef = updater().getAndAdd(instance, rawIncrement);
+        //2. 如果该对象已经无效（ 引用数量为 0 ），则抛出异常
         if (oldRef != 2 && oldRef != 4 && (oldRef & 1) != 0) {
             throw new IllegalReferenceCountException(0, increment);
         }
         // don't pass 0!
+        //3. 如果引用数溢出
         if ((oldRef <= 0 && oldRef + rawIncrement >= 0)
                 || (oldRef >= 0 && oldRef + rawIncrement < oldRef)) {
             // overflow case
@@ -145,10 +163,20 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
                 : nonFinalRelease0(instance, decrement, rawCnt, realCnt);
     }
 
+    /*
+     *  使用 cas 方式修改 refCnt 为奇数 （尝试释放）
+     */
     private boolean tryFinalRelease0(T instance, int expectRawCnt) {
         return updater().compareAndSet(instance, expectRawCnt, 1); // any odd number will work
     }
 
+    /**
+     * @param instance 引用计数对象
+     * @param decrement 需要释放的计数
+     * @param rawCnt refCnt 的值
+     * @param realCnt  真实的引用计数
+     * @return
+     */
     private boolean nonFinalRelease0(T instance, int decrement, int rawCnt, int realCnt) {
         if (decrement < realCnt
                 // all changes to the raw count are 2x the "real" change - overflow is OK
@@ -158,6 +186,9 @@ public abstract class ReferenceCountUpdater<T extends ReferenceCounted> {
         return retryRelease0(instance, decrement);
     }
 
+    /*
+     *  通过 cas 释放指定的引用数，直到成功，或者抛出异常
+     */
     private boolean retryRelease0(T instance, int decrement) {
         for (;;) {
             int rawCnt = updater().get(instance), realCnt = toLiveRealRefCnt(rawCnt, decrement);

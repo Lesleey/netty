@@ -247,6 +247,15 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         return StringUtil.simpleClassName(this) + "(directByDefault: " + directByDefault + ')';
     }
 
+
+    /**
+     *  使用倍增算法和步进算法的原因:
+     *      1. 如果使用 minNewCapacity 直接作为新容量，则此次写入操作完成之后，可写字节数变为0， 下载进行写入操作需要再次扩容
+     *      这样就会导致扩容一次之后，每次写入都需动态扩容，从而频繁的进行内存复制
+     *      2. 采用先倍增后步进的算法，是因为当数组缓冲区较小时，倍增操作不会带来太多的浪费，而当内存增长到一定的阀值之后，再次内增就会
+     *      造成外的内存浪费，比如对于 10 MB大小的内存进行扩容编程 20 MB， 但系统可能只需要 12 MB，导致内存浪费的比例的增加，所以达到某个
+     *      阀值之后需要以步进的方式进行平滑的扩张
+     */
     @Override
     public int calculateNewCapacity(int minNewCapacity, int maxCapacity) {
         checkPositiveOrZero(minNewCapacity, "minNewCapacity");
@@ -255,13 +264,15 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
                     "minNewCapacity: %d (expected: not greater than maxCapacity(%d)",
                     minNewCapacity, maxCapacity));
         }
+        //1. 设置的阀值为 4MB
         final int threshold = CALCULATE_THRESHOLD; // 4 MiB page
-
+        //2. 如果所需容量正好等于阀值，则直接返回阀值对应的值
         if (minNewCapacity == threshold) {
             return threshold;
         }
 
         // If over threshold, do not double but just increase by threshold.
+        //3. （步进算法）如果最需的容量大于阀值，则新容量等于 Min(maxCapacity, n * threadshold) 其中 n < minNewCapacity / threadshold < n + 1
         if (minNewCapacity > threshold) {
             int newCapacity = minNewCapacity / threshold * threshold;
             if (newCapacity > maxCapacity - threshold) {
@@ -273,6 +284,7 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         }
 
         // Not over threshold. Double up to 4 MiB, starting from 64.
+        //4. （倍增算法）如果没有超过阀值，则进行二倍扩容，直到超过所需容量
         int newCapacity = 64;
         while (newCapacity < minNewCapacity) {
             newCapacity <<= 1;

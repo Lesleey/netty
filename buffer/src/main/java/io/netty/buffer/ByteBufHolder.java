@@ -19,6 +19,8 @@ import io.netty.util.ReferenceCounted;
 
 /**
  * A packet which is send or receive.
+ *
+ *  被发送或者接收的分组，作为 ByteBuf 的容器，由于不同的一些消息体可以包含不同的协议字段和功能，所以对Bytebuf 进行包装和抽象
  */
 public interface ByteBufHolder extends ReferenceCounted {
 

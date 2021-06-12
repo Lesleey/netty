@@ -42,6 +42,8 @@ import io.netty.util.internal.TypeParameterMatcher;
  *         }
  *     }
  * </pre>
+ *
+ *  编码器: 以流式的方式将一条消息编码为 ByteBuf
  */
 public abstract class MessageToByteEncoder<I> extends ChannelOutboundHandlerAdapter {
 
@@ -95,27 +97,34 @@ public abstract class MessageToByteEncoder<I> extends ChannelOutboundHandlerAdap
         return matcher.match(msg);
     }
 
+    /**
+     *  编码的主要逻辑
+     */
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
         ByteBuf buf = null;
         try {
+            // 如果当前编码器支持对接收的消息类型处理，则开始编码
             if (acceptOutboundMessage(msg)) {
                 @SuppressWarnings("unchecked")
                 I cast = (I) msg;
                 buf = allocateBuffer(ctx, cast, preferDirect);
+                //1. 由具体实现类进行编码
                 try {
                     encode(ctx, cast, buf);
                 } finally {
                     ReferenceCountUtil.release(cast);
                 }
-
+                //2. 如果缓冲区包含可发送的字节，则调用 write 发送
                 if (buf.isReadable()) {
                     ctx.write(buf, promise);
+                 //3. 否则，发送空缓冲区
                 } else {
                     buf.release();
                     ctx.write(Unpooled.EMPTY_BUFFER, promise);
                 }
                 buf = null;
+             // 否则，交由下一处理器处理
             } else {
                 ctx.write(msg, promise);
             }

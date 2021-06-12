@@ -152,15 +152,22 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         return addFirst(null, name, handler);
     }
 
+    /**
+     *   向通道持有的 Handler 链表的头部新增一个 Handler
+     */
     @Override
     public final ChannelPipeline addFirst(EventExecutorGroup group, String name, ChannelHandler handler) {
         final AbstractChannelHandlerContext newCtx;
+        //由于 ChannelPiple 支持运行期间 动态的修改，所以增加锁
         synchronized (this) {
+            //1. 检测 Handler 是否可共享
             checkMultiplicity(handler);
-            name = filterName(name, handler);
 
+            name = filterName(name, handler);
+            //2. 初始化 AbstractChannelHandlerContext
             newCtx = newContext(group, name, handler);
 
+            //3. 将 ChannelHandlerContext 添加到头部
             addFirst0(newCtx);
 
             // If the registered is false it means that the channel was not registered on an eventLoop yet.
@@ -171,7 +178,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                 callHandlerCallbackLater(newCtx, true);
                 return this;
             }
-
+            //4. 触发回调函数
             EventExecutor executor = newCtx.executor();
             if (!executor.inEventLoop()) {
                 callHandlerAddedInEventLoop(newCtx, executor);
@@ -641,6 +648,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    // 当通道注册到多路复用器中后，用来将自定义的 ChannelHandler 添加到管道中
     final void invokeHandlerAddedIfNeeded() {
         assert channel.eventLoop().inEventLoop();
         if (firstRegistration) {

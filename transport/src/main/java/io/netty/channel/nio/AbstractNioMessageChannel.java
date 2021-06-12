@@ -31,6 +31,8 @@ import java.util.List;
 
 /**
  * {@link AbstractNioChannel} base class for {@link Channel}s that operate on messages.
+ *
+ *   直接操作消息的抽象通道类
  */
 public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
     boolean inputShutdown;
@@ -130,25 +132,28 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
         final SelectionKey key = selectionKey();
         final int interestOps = key.interestOps();
-
+        //1. 获取配置—— 消息的最大写出次数
         int maxMessagesPerWrite = maxMessagesPerWrite();
         while (maxMessagesPerWrite > 0) {
+            //2. 如果消息已被写完，则直接退出
             Object msg = in.current();
             if (msg == null) {
                 break;
             }
             try {
                 boolean done = false;
+                //3. 根据最大写出次数，进行写操作
                 for (int i = config().getWriteSpinCount() - 1; i >= 0; i--) {
                     if (doWriteMessage(msg, in)) {
                         done = true;
                         break;
                     }
                 }
-
+                //4. 如果此次写成功，则将 消息的最大写出次数 减一
                 if (done) {
                     maxMessagesPerWrite--;
                     in.remove();
+                //5. 如果在最大写出次数内，没有写出数据，则直接退出
                 } else {
                     break;
                 }
@@ -161,11 +166,13 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                 }
             }
         }
+        //1. 如果缓冲区已无数据，则清除写操作位
         if (in.isEmpty()) {
             // Wrote all messages.
             if ((interestOps & SelectionKey.OP_WRITE) != 0) {
                 key.interestOps(interestOps & ~SelectionKey.OP_WRITE);
             }
+        //2. 如果缓冲区有数据，则重新设置写操作位
         } else {
             // Did not write all messages.
             if ((interestOps & SelectionKey.OP_WRITE) == 0) {

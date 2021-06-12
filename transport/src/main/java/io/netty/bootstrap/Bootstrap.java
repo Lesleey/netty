@@ -42,6 +42,8 @@ import java.net.SocketAddress;
  *
  * <p>The {@link #bind()} methods are useful in combination with connectionless transports such as datagram (UDP).
  * For regular TCP connections, please use the provided {@link #connect()} methods.</p>
+ *
+ *   用于便捷的启动客户端
  */
 public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
 
@@ -150,16 +152,20 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
 
     /**
      * @see #connect()
+     *
+     *   连接请求的主要逻辑
      */
     private ChannelFuture doResolveAndConnect(final SocketAddress remoteAddress, final SocketAddress localAddress) {
+        //1. 初始化和注册通道
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
-
+        //2. 如果注册任务已完成，则进行连接
         if (regFuture.isDone()) {
             if (!regFuture.isSuccess()) {
                 return regFuture;
             }
             return doResolveAndConnect0(channel, remoteAddress, localAddress, channel.newPromise());
+         //3. 如果未完成，则添加监听器，当任务结束后进行连接
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
@@ -256,6 +262,9 @@ public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
         });
     }
 
+    /**
+     *   初始化连接通道， 用于向通道对应的管道中添加指定的 ChannelHandler
+     */
     @Override
     void init(Channel channel) {
         ChannelPipeline p = channel.pipeline();

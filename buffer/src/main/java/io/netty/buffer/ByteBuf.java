@@ -244,6 +244,16 @@ import java.nio.charset.UnsupportedCharsetException;
  *
  * Please refer to {@link ByteBufInputStream} and
  * {@link ByteBufOutputStream}.
+ *
+ *   java Nio ByteBuffer 的缺点
+ *      1. 长度规定，不支持动态扩容
+ *      2. 读写操作共用一个指针，使用者必须小心使用 读写相关的 api
+ *      3. 功能有限，一些高级和实用的特性不支持
+ *   从内存分配的角度来说，ByteBuf 分为两类
+ *      1. 堆内存: 内存的分配和回收较快，可以被 JVM自动回收，缺点是对于 Socket的IO读写，会额外做一次内存复制，性能有一定程度的下降
+ *      所以该类 ByteBuf 一般用于处理后端业务消息的编解码模块
+ *      2. 直接内存: 在堆外进行内存分配，所以分配和回收较慢，但是对于Socket的IO, 会少一次内存复制，所以该类ByteBuf 一般用于IO通信线程的读写
+ *      缓冲区
  */
 public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
 
@@ -259,6 +269,10 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      * {@code (newCapacity - currentCapacity)}.
      *
      * @throws IllegalArgumentException if the {@code newCapacity} is greater than {@link #maxCapacity()}
+     *
+     *   调整缓冲区的容量
+     *      1. 如果指定的容量小于缓冲区的容量，则缓冲区会被截断
+     *      2. 如果指定的容量大于缓冲区的容量，缓冲区将会被扩展到指定的容量
      */
     public abstract ByteBuf capacity(int newCapacity);
 
@@ -509,6 +523,8 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      * to {@code 0} and {@code oldWriterIndex - oldReaderIndex} respectively.
      * <p>
      * Please refer to the class documentation for more detailed explanation.
+     *
+     *  重用缓冲区，丢弃缓冲区中已被读取的字节序列
      */
     public abstract ByteBuf discardReadBytes();
 
@@ -531,6 +547,8 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      * @throws IndexOutOfBoundsException
      *         if {@link #writerIndex()} + {@code minWritableBytes} &gt; {@link #maxCapacity()}.
      * @see #capacity(int)
+     *
+     *   用于自动扩容，确定缓冲区中可写的字节数等于或者大于指定的参数，如果可写的字节数满足，该方法不会有任何的影响
      */
     public abstract ByteBuf ensureWritable(int minWritableBytes);
 
@@ -1759,6 +1777,8 @@ public abstract class ByteBuf implements ReferenceCounted, Comparable<ByteBuf> {
      *
      * @throws IndexOutOfBoundsException
      *         if {@code length} is greater than {@code this.readableBytes}
+     *   增加该缓冲区 readIndex 指定的长度
+     *   在解码时，用于丢弃非法的数据或者跳过不需读取的字节或者字节数组
      */
     public abstract ByteBuf skipBytes(int length);
 

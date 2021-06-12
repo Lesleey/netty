@@ -25,6 +25,8 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
 /**
  * Special {@link AbstractList} implementation which is used within our codec base classes.
+ *
+ *  被用于我们的编码类中
  */
 final class CodecOutputList extends AbstractList<Object> implements RandomAccess {
 
@@ -44,10 +46,16 @@ final class CodecOutputList extends AbstractList<Object> implements RandomAccess
                 }
             };
 
+    /**
+     *  用于回收 CodecOutputList
+     */
     private interface CodecOutputListRecycler {
         void recycle(CodecOutputList codecOutputList);
     }
 
+    /**
+     *  类似于连接池的概念, 使得 CodecOutputList 可以被重用，比如频繁的创建 List 实例
+     */
     private static final class CodecOutputLists implements CodecOutputListRecycler {
         private final CodecOutputList[] elements;
         private final int mask;

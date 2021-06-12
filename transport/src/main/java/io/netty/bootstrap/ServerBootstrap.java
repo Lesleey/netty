@@ -41,6 +41,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * {@link Bootstrap} sub-class which allows easy bootstrap of {@link ServerChannel}
  *
+ *    用来简化服务端 ServerChannel 的启动
  */
 public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerChannel> {
 
@@ -48,10 +49,15 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     // The order in which child ChannelOptions are applied is important they may depend on each other for validation
     // purposes.
+    // 用于设置子通道（ServerSocketChannel 中的 SocketChannel） 连接参数和初始化属性
     private final Map<ChannelOption<?>, Object> childOptions = new LinkedHashMap<ChannelOption<?>, Object>();
     private final Map<AttributeKey<?>, Object> childAttrs = new ConcurrentHashMap<AttributeKey<?>, Object>();
     private final ServerBootstrapConfig config = new ServerBootstrapConfig(this);
+
+    // 用来处理服务端连接请求中的任务
     private volatile EventLoopGroup childGroup;
+
+    // NioServerSocketChannel 对应的管道的 ChannelHandler
     private volatile ChannelHandler childHandler;
 
     public ServerBootstrap() { }
@@ -78,12 +84,16 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
      * Set the {@link EventLoopGroup} for the parent (acceptor) and the child (client). These
      * {@link EventLoopGroup}'s are used to handle all the events and IO for {@link ServerChannel} and
      * {@link Channel}'s.
+     *
+     *  设置并绑定 Reactor线程池 EventLoopGroup, 该线程池的作用是用来处理所有的事件以及通道的IO
      */
     public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGroup) {
+        //1. 用于处理网络连接请求（父通道）的线程池
         super.group(parentGroup);
         if (this.childGroup != null) {
             throw new IllegalStateException("childGroup set already");
         }
+        //2. 用于处理子通道中发生的网络IO事件的线程池
         this.childGroup = ObjectUtil.checkNotNull(childGroup, "childGroup");
         return this;
     }
@@ -127,11 +137,16 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         return this;
     }
 
+    /**
+     *   初始化服务端的通道 (ServerSocketChannel )
+     */
     @Override
     void init(Channel channel) {
+        //1. 设置连接参数和初始化属性
         setChannelOptions(channel, newOptionsArray(), logger);
         setAttributes(channel, newAttributesArray());
 
+        //2. 获取分配给该通道 ( ServerSocketChannel ) 的 ChannelPipeLine
         ChannelPipeline p = channel.pipeline();
 
         final EventLoopGroup currentChildGroup = childGroup;
@@ -139,6 +154,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         final Entry<ChannelOption<?>, Object>[] currentChildOptions = newOptionsArray(childOptions);
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = newAttributesArray(childAttrs);
 
+        //3. 设置 ChannelHandler 用来处理该通道中发生的IO事件
         p.addLast(new ChannelInitializer<Channel>() {
             @Override
             public void initChannel(final Channel ch) {
@@ -147,7 +163,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
                 if (handler != null) {
                     pipeline.addLast(handler);
                 }
-
+                // 向该通道中添加 ServerBootstrapAcceptor 处理器，用来处理连接和分发任务
                 ch.eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {
@@ -172,8 +188,12 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         return this;
     }
 
+    /**
+     *  Reactor 模型中的 Acceptor
+     */
     private static class ServerBootstrapAcceptor extends ChannelInboundHandlerAdapter {
 
+        // 用于初始化通道的必要属性
         private final EventLoopGroup childGroup;
         private final ChannelHandler childHandler;
         private final Entry<ChannelOption<?>, Object>[] childOptions;
@@ -193,6 +213,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             // not be able to load the class because of the file limit it already reached.
             //
             // See https://github.com/netty/netty/issues/1328
+            // todo 用于开启自动阅读
             enableAutoReadTask = new Runnable() {
                 @Override
                 public void run() {

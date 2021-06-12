@@ -45,6 +45,8 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
  * A virtual buffer which shows multiple buffers as a single merged buffer.  It is recommended to use
  * {@link ByteBufAllocator#compositeBuffer()} or {@link Unpooled#wrappedBuffer(ByteBuf...)} instead of calling the
  * constructor explicitly.
+ *    一个虚拟的缓冲区，展示多个缓冲区为一个单一的缓冲区，形成一个统一的视图，
+ *    todo lesleey CompositeByteBuf
  */
 public class CompositeByteBuf extends AbstractReferenceCountedByteBuf implements Iterable<ByteBuf> {
 
@@ -1876,13 +1878,20 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf implements
     }
 
     private static final class Component {
+        // 最初添加的缓冲区
         final ByteBuf srcBuf; // the originally added buffer
         final ByteBuf buf; // srcBuf unwrapped zero or more times
 
+        // srcBuf 的 readIndex 到 CompositeByteBuf 的 "readIndex" 的相对偏移量
         int srcAdjustment; // index of the start of this CompositeByteBuf relative to srcBuf
+
+        // buf 的 readIndex 到 ComposteByteBuf 的 "readIndex" 的相对偏移量
         int adjustment; // index of the start of this CompositeByteBuf relative to buf
 
+        // srcBuf 的 readIndex 在 CompositeByteBuf 中的 "readIndex"
         int offset; // offset of this component within this CompositeByteBuf
+
+        // srcBuf 的 writeIndex 在 CompositeByteBuf 中的 "WriteIndex"
         int endOffset; // end offset of this component within this CompositeByteBuf
 
         private ByteBuf slice; // cached slice, may be null

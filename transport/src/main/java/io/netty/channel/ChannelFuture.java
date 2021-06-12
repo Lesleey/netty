@@ -161,6 +161,19 @@ import java.util.concurrent.TimeUnit;
  *     // Connection established successfully
  * }
  * </pre>
+ *
+ *   用于获取通道中IO操作的结果。
+ *   ChannelFuture 有两种状态
+ *      1. 完成
+ *          操作成功、操作失败、操作取消
+ *      2. 未完成
+ *          非失败、非成功、非取消
+ *    注意：不要在 ChannelHandler 中调用 ChannelFuture 的 await 方法，因为这回导致死锁
+ *    异步操作有两类超时
+ *      1. TCP 层面的IO超时
+ *      2. 业务逻辑层面的超时
+ *     需要注意的是，业务操作的超时不一定表示IO超时，所以可能 ChannelFuture 超时后，没有关闭资源，随后连接依然会成功，这回导致严重的问题。
+ *     所以要考虑就是设置IO超时还是 ChannelFuture 超时
  */
 public interface ChannelFuture extends Future<Void> {
 

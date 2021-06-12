@@ -51,13 +51,21 @@ import java.util.List;
  * + 0x000E | "HELLO, WORLD" |
  * +--------+----------------+
  * </pre>
+ *
+ *    编码器: 预置了消息的长度，长度值作为二进制数据出现
+ *
+ *
  */
 @Sharable
 public class LengthFieldPrepender extends MessageToMessageEncoder<ByteBuf> {
 
     private final ByteOrder byteOrder;
+
+    // 长度字段所占用的字节数
     private final int lengthFieldLength;
+    // 长度字段指定的长度时是否包含其长度字段本身
     private final boolean lengthIncludesLengthFieldLength;
+    // 长度字段的补偿值
     private final int lengthAdjustment;
 
     /**
@@ -156,15 +164,19 @@ public class LengthFieldPrepender extends MessageToMessageEncoder<ByteBuf> {
         this.lengthAdjustment = lengthAdjustment;
     }
 
+    /*
+     * 编码的主要逻辑
+     */
     @Override
     protected void encode(ChannelHandlerContext ctx, ByteBuf msg, List<Object> out) throws Exception {
+        // 1. 计算长度字段的值
         int length = msg.readableBytes() + lengthAdjustment;
         if (lengthIncludesLengthFieldLength) {
             length += lengthFieldLength;
         }
 
         checkPositiveOrZero(length, "length");
-
+        //2.  分配缓冲区，存储字段的长度，并添加到 out 集合中
         switch (lengthFieldLength) {
         case 1:
             if (length >= 256) {
@@ -196,6 +208,7 @@ public class LengthFieldPrepender extends MessageToMessageEncoder<ByteBuf> {
         default:
             throw new Error("should not reach here");
         }
+        //3. 将原始消息添加到集合中
         out.add(msg.retain());
     }
 }

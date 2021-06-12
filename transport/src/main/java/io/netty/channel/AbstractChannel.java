@@ -39,20 +39,26 @@ import java.util.concurrent.RejectedExecutionException;
 
 /**
  * A skeletal {@link Channel} implementation.
+ *
+ *    Channel 的主要实现
  */
 public abstract class AbstractChannel extends DefaultAttributeMap implements Channel {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractChannel.class);
-
+    // 当前通道的父通道（eg, SocketChannel）
     private final Channel parent;
+    // 当前通道的唯一标识
     private final ChannelId id;
+    // 实际完成IO的辅助类
     private final Unsafe unsafe;
+    // 当前通道 Channel 对应的 通道管道类
     private final DefaultChannelPipeline pipeline;
     private final VoidChannelPromise unsafeVoidPromise = new VoidChannelPromise(this, false);
     private final CloseFuture closeFuture = new CloseFuture(this);
 
     private volatile SocketAddress localAddress;
     private volatile SocketAddress remoteAddress;
+    // 当前通道注册的事件组
     private volatile EventLoop eventLoop;
     private volatile boolean registered;
     private boolean closeInitiated;
@@ -461,6 +467,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             return remoteAddress0();
         }
 
+        /**
+         *   将 Unsafe 对应的 Channel 注册到 EventLoop 的多路复用器上
+         */
         @Override
         public final void register(EventLoop eventLoop, final ChannelPromise promise) {
             ObjectUtil.checkNotNull(eventLoop, "eventLoop");
@@ -476,8 +485,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             AbstractChannel.this.eventLoop = eventLoop;
 
+            //1. 判断 当前线程 是否为EventLoop 对应的线程, 如果是，则表示不存在多线程并发问题，直接进行注册
             if (eventLoop.inEventLoop()) {
                 register0(promise);
+            //2. 否则，将注册过程交给 EventLoop 对应的线程
             } else {
                 try {
                     eventLoop.execute(new Runnable() {
@@ -501,25 +512,31 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             try {
                 // check if the channel is still open as it could be closed in the mean time when the register
                 // call was outside of the eventLoop
+                //1. 首先判断当前通道是否已经被打开，如果没有打开，则不允许被注册
                 if (!promise.setUncancellable() || !ensureOpen(promise)) {
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
+                //2. 将 当前通道注册到多路复用器上
                 doRegister();
                 neverRegistered = false;
                 registered = true;
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
+
                 pipeline.invokeHandlerAddedIfNeeded();
 
                 safeSetSuccess(promise);
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
+
                 if (isActive()) {
+                    //3. 如果为第一次注册，则触发管道的回调事件
                     if (firstRegistration) {
                         pipeline.fireChannelActive();
+                    //4. 如果通道的设置自动开始读取数据，则开始读监听
                     } else if (config().isAutoRead()) {
                         // This channel was registered before and autoRead() is set. This means we need to begin read
                         // again so that we process inbound data.
@@ -536,10 +553,13 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
         }
 
+        /**
+         *  给套接字绑定指定的接口
+         */
         @Override
         public final void bind(final SocketAddress localAddress, final ChannelPromise promise) {
             assertEventLoop();
-
+            //1. 如果通道没有打开，直接退出
             if (!promise.setUncancellable() || !ensureOpen(promise)) {
                 return;
             }
@@ -556,7 +576,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                         "is not bound to a wildcard address; binding to a non-wildcard " +
                         "address (" + localAddress + ") anyway as requested.");
             }
-
+            //2. 开始绑定端口号和地址
             boolean wasActive = isActive();
             try {
                 doBind(localAddress);
@@ -565,7 +585,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 closeIfClosed();
                 return;
             }
-
+            //3.  如果通道的连接状态发生变化，则触发管道的回调函数
             if (!wasActive && isActive()) {
                 invokeLater(new Runnable() {
                     @Override
@@ -900,7 +920,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 }
                 return;
             }
-
+            // 将待发送的数据放到环形缓冲区
             outboundBuffer.addMessage(msg, size, promise);
         }
 

@@ -146,6 +146,8 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
     /**
      * Return the deadline (in nanoseconds) when the next scheduled task is ready to be run or {@code -1}
      * if no task is scheduled.
+     *
+     *   返回下次需要调度任务的截止日期，如果不存在返回 -1
      */
     protected final long nextScheduledTaskDeadlineNanos() {
         ScheduledFutureTask<?> scheduledTask = peekScheduledTask();

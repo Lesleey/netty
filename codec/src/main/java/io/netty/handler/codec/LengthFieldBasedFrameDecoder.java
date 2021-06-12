@@ -183,19 +183,29 @@ import io.netty.channel.ChannelHandlerContext;
  * +------+--------+------+----------------+      +------+----------------+
  * </pre>
  * @see LengthFieldPrepender
+ *
+ *   基于消息长度的半包解码器
  */
 public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
 
     private final ByteOrder byteOrder;
+    // 可接受的帧的最大长度
     private final int maxFrameLength;
+    // 长度字段的偏移量（相对于消息的起点）
     private final int lengthFieldOffset;
+    // 长度字段所占的字节数
     private final int lengthFieldLength;
+    // 长度字段尾部偏移量
     private final int lengthFieldEndOffset;
+    // 长度字段的补偿值, 对于某些协议，长度还包含了消息头的长度，所以需要该值进行修正
     private final int lengthAdjustment;
+    // 解码时，去除的字节长度（我们可以在解码时，去除长度字段）
     private final int initialBytesToStrip;
     private final boolean failFast;
     private boolean discardingTooLongFrame;
+    // 超过限制的帧的长度
     private long tooLongFrameLength;
+    // 需要丢弃的字节长度
     private long bytesToDiscard;
 
     /**
@@ -327,6 +337,9 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
         this.failFast = failFast;
     }
 
+    /**
+     *  解码的主要逻辑
+     */
     @Override
     protected final void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
         Object decoded = decode(ctx, in);
@@ -360,19 +373,25 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
               "than lengthFieldEndOffset: " + lengthFieldEndOffset);
     }
 
+    /**
+     * @param in 数据缓冲区
+     * @param frameLength 帧的长度
+     */
     private void exceededFrameLength(ByteBuf in, long frameLength) {
         long discard = frameLength - in.readableBytes();
         tooLongFrameLength = frameLength;
-
+        //1. 缓冲区包含比帧更长的字节，直接放弃当前帧
         if (discard < 0) {
             // buffer contains more bytes then the frameLength so we can discard all now
             in.skipBytes((int) frameLength);
+        //2. 缓冲区只包含该帧的一部分，则放弃缓冲区中所有数据，则记录需要下次丢弃的长度
         } else {
             // Enter the discard mode and discard everything received so far.
             discardingTooLongFrame = true;
             bytesToDiscard = discard;
             in.skipBytes(in.readableBytes());
         }
+        //3.
         failIfNecessary(true);
     }
 
@@ -392,6 +411,7 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
      * @param   in              the {@link ByteBuf} from which to read data
      * @return  frame           the {@link ByteBuf} which represent the frame or {@code null} if no frame could
      *                          be created.
+     *
      */
     protected Object decode(ChannelHandlerContext ctx, ByteBuf in) throws Exception {
         if (discardingTooLongFrame) {
@@ -403,18 +423,19 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
         }
 
         int actualLengthFieldOffset = in.readerIndex() + lengthFieldOffset;
+        //1. 获取长度字段指定的长度
         long frameLength = getUnadjustedFrameLength(in, actualLengthFieldOffset, lengthFieldLength, byteOrder);
 
         if (frameLength < 0) {
             failOnNegativeLengthField(in, frameLength, lengthFieldEndOffset);
         }
-
+        //2. 获取实际帧的长度
         frameLength += lengthAdjustment + lengthFieldEndOffset;
 
         if (frameLength < lengthFieldEndOffset) {
             failOnFrameLengthLessThanLengthFieldEndOffset(in, frameLength, lengthFieldEndOffset);
         }
-
+        //3. 如果帧的长度超过系统允许的最大容量, 则进行丢弃当前帧
         if (frameLength > maxFrameLength) {
             exceededFrameLength(in, frameLength);
             return null;
@@ -422,6 +443,7 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
 
         // never overflows because it's less than maxFrameLength
         int frameLengthInt = (int) frameLength;
+        //4. 如果读到半包消息，则直接返回，等待 IO线程线程继续读取后续的数据报
         if (in.readableBytes() < frameLengthInt) {
             return null;
         }
@@ -434,6 +456,7 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
         // extract frame
         int readerIndex = in.readerIndex();
         int actualFrameLength = frameLengthInt - initialBytesToStrip;
+        //4. 根据帧的长度抽取缓冲区中的帧
         ByteBuf frame = extractFrame(ctx, in, readerIndex, actualFrameLength);
         in.readerIndex(readerIndex + actualFrameLength);
         return frame;

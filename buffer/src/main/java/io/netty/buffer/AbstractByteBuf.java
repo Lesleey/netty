@@ -48,8 +48,12 @@ public abstract class AbstractByteBuf extends ByteBuf {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractByteBuf.class);
     private static final String LEGACY_PROP_CHECK_ACCESSIBLE = "io.netty.buffer.bytebuf.checkAccessible";
     private static final String PROP_CHECK_ACCESSIBLE = "io.netty.buffer.checkAccessible";
+
+    // 是否进行有效性检查， 判断此次访问在 byteBuf 引用计数变为 0 之前
     static final boolean checkAccessible; // accessed from CompositeByteBuf
     private static final String PROP_CHECK_BOUNDS = "io.netty.buffer.checkBounds";
+
+    //  是否检查读写边界
     private static final boolean checkBounds;
 
     static {
@@ -212,12 +216,17 @@ public abstract class AbstractByteBuf extends ByteBuf {
         return this;
     }
 
+    /**
+     *   丢弃已读的字节序列
+     */
     @Override
     public ByteBuf discardReadBytes() {
+
         if (readerIndex == 0) {
             ensureAccessible();
             return this;
         }
+
 
         if (readerIndex != writerIndex) {
             setBytes(0, this, readerIndex, writerIndex - readerIndex);
@@ -232,6 +241,10 @@ public abstract class AbstractByteBuf extends ByteBuf {
         return this;
     }
 
+
+    /**
+     *   只有已读的字节序列超过容量的一半时才会执行丢弃操作
+     */
     @Override
     public ByteBuf discardSomeReadBytes() {
         if (readerIndex > 0) {
@@ -281,14 +294,19 @@ public abstract class AbstractByteBuf extends ByteBuf {
         return this;
     }
 
+    /**
+     * @param minWritableBytes 此次写操作所需要最小的可写字节数
+     */
     final void ensureWritable0(int minWritableBytes) {
         final int writerIndex = writerIndex();
         final int targetCapacity = writerIndex + minWritableBytes;
         // using non-short-circuit & to reduce branching - this is a hot path and targetCapacity should rarely overflow
+        //1. 通常情况下，容量很少会溢出，所以在此处判断如果数组容量大于所需容量，则直接返回（用于jvm对代码的优化策略）
         if (targetCapacity >= 0 & targetCapacity <= capacity()) {
             ensureAccessible();
             return;
         }
+        //2. 如果检查边界，且所需的容量大于设置的最大容量，则抛出异常
         if (checkBounds && (targetCapacity < 0 || targetCapacity > maxCapacity)) {
             ensureAccessible();
             throw new IndexOutOfBoundsException(String.format(
@@ -297,11 +315,13 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
 
         // Normalize the target capacity to the power of 2.
+        //3. 计算所需要的新容量
         final int fastWritable = maxFastWritableBytes();
         int newCapacity = fastWritable >= minWritableBytes ? writerIndex + fastWritable
                 : alloc().calculateNewCapacity(targetCapacity, maxCapacity);
 
         // Adjust to the new capacity.
+        //4. 扩容操作
         capacity(newCapacity);
     }
 

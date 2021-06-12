@@ -18,6 +18,9 @@ package io.netty.buffer;
 /**
  * Implementations are responsible to allocate buffers. Implementations of this interface are expected to be
  * thread-safe.
+ *
+ *   负责分配缓冲区，该接口的实现类应该是线程安全的。按照 Netty的缓冲区实现，共有两种不同的分配器：
+ *      基于内存池的字节缓冲区分配器和普通的字节换城区分配器
  */
 public interface ByteBufAllocator {
 

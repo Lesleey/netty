@@ -34,11 +34,17 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
  * Big endian Java heap buffer implementation. It is recommended to use
  * {@link UnpooledByteBufAllocator#heapBuffer(int, int)}, {@link Unpooled#buffer(int)} and
  * {@link Unpooled#wrappedBuffer(byte[])} instead of calling the constructor explicitly.
+ *
+ *   基于堆内存进行内存分配的字节缓冲器，没有基于对象池实现，意味着每次IO都会创建一个新的实例，频繁进行大块内存
+ *   的分配和回收会对性能造成一定的影响，但是相比于堆外内存的申请和释放，它的成本还是较低一些
  */
 public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
 
+    // 用于当前类的内存分配
     private final ByteBufAllocator alloc;
+    // 充当缓冲区
     byte[] array;
+    // 用于实现 byteBuf 和 ByteBuffer 的转换
     private ByteBuffer tmpNioBuf;
 
     /**
@@ -117,12 +123,13 @@ public class UnpooledHeapByteBuf extends AbstractReferenceCountedByteBuf {
     @Override
     public ByteBuf capacity(int newCapacity) {
         checkNewCapacity(newCapacity);
+        //1. 如果指定的容量等于缓冲区的容量，则返回本身
         byte[] oldArray = array;
         int oldCapacity = oldArray.length;
         if (newCapacity == oldCapacity) {
             return this;
         }
-
+        //2. 截断（扩展）数组，并将截断后（原数组中）的数据复制到新的数组中
         int bytesToCopy;
         if (newCapacity > oldCapacity) {
             bytesToCopy = oldCapacity;

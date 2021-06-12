@@ -147,6 +147,9 @@ public interface ChannelConfig {
      * It is similar to what a spin lock is used for in concurrency programming.
      * It improves memory utilization and write throughput depending on
      * the platform that JVM runs on.  The default value is {@code 16}.
+     *
+     *   写操作的最大循环次数，也就是当一次发送没有完成时（写半包），继续循环发送的次数
+     *   设置该值的原因是，当循环发送时，IO线程会一直尝试进行写操作，此时IO线程无法处理其他IO操作， 如果网络IO阻塞或者对方接收消息太慢，可能会导致线程假死
      */
     int getWriteSpinCount();
 

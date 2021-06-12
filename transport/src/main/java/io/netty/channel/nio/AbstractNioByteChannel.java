@@ -39,6 +39,8 @@ import static io.netty.channel.internal.ChannelUtils.WRITE_STATUS_SNDBUF_FULL;
 
 /**
  * {@link AbstractNioChannel} base class for {@link Channel}s that operate on bytes.
+ *
+ *  直接操作字节的通道抽象类
  */
 public abstract class AbstractNioByteChannel extends AbstractNioChannel {
     private static final ChannelMetadata METADATA = new ChannelMetadata(false, 16);
@@ -252,9 +254,14 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
 
     @Override
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
+
         int writeSpinCount = config().getWriteSpinCount();
+        // 如果没有超过最大的循环写操作的阀值，一直尝试写操作
         do {
+            //1. 获取准备被写的数据
             Object msg = in.current();
+
+            //2. 如果数据已被写完成，则清除写操作位，并退出循环
             if (msg == null) {
                 // Wrote all messages.
                 clearOpWrite();
@@ -286,10 +293,15 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                 "unsupported message type: " + StringUtil.simpleClassName(msg) + EXPECTED_TYPES);
     }
 
+    /**
+     *  处理写操作执行结果
+     */
     protected final void incompleteWrite(boolean setOpWrite) {
         // Did not write completely.
+        //1. 如果没有写完成（半包），则（如果必要的话）设置写操作位
         if (setOpWrite) {
             setOpWrite();
+        //2. 如果写完成，清除写操作位，并刷新缓冲区
         } else {
             // It is possible that we have set the write OP, woken up by NIO because the socket is writable, and then
             // use our write quantum. In this case we no longer want to set the write OP because the socket is still
@@ -322,6 +334,9 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
      */
     protected abstract int doWriteBytes(ByteBuf buf) throws Exception;
 
+    /**
+     *  设置写操作位
+     */
     protected final void setOpWrite() {
         final SelectionKey key = selectionKey();
         // Check first if the key is still valid as it may be canceled as part of the deregistration
@@ -336,6 +351,9 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
         }
     }
 
+    /*
+     * 清除 SelectionKey 的写操作位
+     */
     protected final void clearOpWrite() {
         final SelectionKey key = selectionKey();
         // Check first if the key is still valid as it may be canceled as part of the deregistration

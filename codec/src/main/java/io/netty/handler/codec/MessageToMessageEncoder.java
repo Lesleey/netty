@@ -48,6 +48,8 @@ import java.util.List;
  * Be aware that you need to call {@link ReferenceCounted#retain()} on messages that are just passed through if they
  * are of type {@link ReferenceCounted}. This is needed as the {@link MessageToMessageEncoder} will call
  * {@link ReferenceCounted#release()} on encoded messages.
+ *
+ *   将一个消息编码为另一种格式的消息
  */
 public abstract class MessageToMessageEncoder<I> extends ChannelOutboundHandlerAdapter {
 
@@ -77,14 +79,19 @@ public abstract class MessageToMessageEncoder<I> extends ChannelOutboundHandlerA
         return matcher.match(msg);
     }
 
+    /**
+     *  编码主要逻辑
+     */
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
         CodecOutputList out = null;
         try {
+            //1. 如果当前编码器支持对当前消息的处理
             if (acceptOutboundMessage(msg)) {
                 out = CodecOutputList.newInstance();
                 @SuppressWarnings("unchecked")
                 I cast = (I) msg;
+                //1. 由子类实现具体的编码细节
                 try {
                     encode(ctx, cast, out);
                 } finally {
@@ -124,6 +131,7 @@ public abstract class MessageToMessageEncoder<I> extends ChannelOutboundHandlerA
         }
     }
 
+    // 循环发送 out 集合中的消息
     private static void writeVoidPromise(ChannelHandlerContext ctx, CodecOutputList out) {
         final ChannelPromise voidPromise = ctx.voidPromise();
         for (int i = 0; i < out.size(); i++) {

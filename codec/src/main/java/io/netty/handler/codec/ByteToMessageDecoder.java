@@ -71,11 +71,19 @@ import static java.lang.Integer.MAX_VALUE;
  * Some methods such as {@link ByteBuf#readBytes(int)} will cause a memory leak if the returned buffer
  * is not released or added to the <tt>out</tt> {@link List}. Use derived buffers like {@link ByteBuf#readSlice(int)}
  * to avoid leaking memory.
+ *
+ *      使用流式的方式将 ByteBuf 转化为另一种消息类型（比如POJO）
+ *      但是使用该类之前没有考虑粘包、半包等问题，所以在管道该 Handler 之前会增加一个 Handler 专门处理帧的检测
+ *      陷阱：
+ *          1. 该类的子类一定不能加 @Sharable 注解
+ *          2. 如果返回的 buffer 没有被释放或者添加到 out 集合中，一些方法比如 readBytes 将会造成内存泄露, 使用派生缓冲区例如 readSlice 可以避免
  */
 public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter {
 
     /**
      * Cumulate {@link ByteBuf}s by merge them into one {@link ByteBuf}'s, using memory copies.
+     *
+     *   基于内存拷贝的方式合并 ByteBuf
      */
     public static final Cumulator MERGE_CUMULATOR = new Cumulator() {
         @Override
@@ -87,6 +95,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
             }
             try {
                 final int required = in.readableBytes();
+                //1. 如果 cumulation 缓冲区中剩余空间无法满足 in 缓冲区中的数据，则将 cumulation 和 in 缓冲区的数据赋值到新缓冲区
                 if (required > cumulation.maxWritableBytes() ||
                         (required > cumulation.maxFastWritableBytes() && cumulation.refCnt() > 1) ||
                         cumulation.isReadOnly()) {
@@ -96,6 +105,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                     //   assumed to be shared (e.g. refCnt() > 1) and the reallocation may not be safe.
                     return expandCumulation(alloc, cumulation, in);
                 }
+                //2. 如果有足够的空间，则将 in 缓冲区中的数据复制到 cumulation 缓冲区中
                 cumulation.writeBytes(in, in.readerIndex(), required);
                 in.readerIndex(in.writerIndex());
                 return cumulation;
@@ -111,6 +121,8 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      * Cumulate {@link ByteBuf}s by add them to a {@link CompositeByteBuf} and so do no memory copy whenever possible.
      * Be aware that {@link CompositeByteBuf} use a more complex indexing implementation so depending on your use-case
      * and the decoder implementation this may be slower then just use the {@link #MERGE_CUMULATOR}.
+     *
+     *   通过 组合缓冲区 CompositeByteBuf 的方式合并多个缓冲区,
      */
     public static final Cumulator COMPOSITE_CUMULATOR = new Cumulator() {
         @Override
@@ -265,14 +277,21 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      */
     protected void handlerRemoved0(ChannelHandlerContext ctx) throws Exception { }
 
+    /**
+     *  解码的主要流程
+     */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        // 如果消息类型为 ByteBuf 才对其进行解码
         if (msg instanceof ByteBuf) {
+            //1. 获取用于存储解码后的对象的集合
             CodecOutputList out = CodecOutputList.newInstance();
             try {
                 first = cumulation == null;
+                //2. 每次读取都合并缓冲区（用户认为读取了半包消息，则此次不作处理，下次读取的 ByteBuf 数据将于此次合并）
                 cumulation = cumulator.cumulate(ctx.alloc(),
                         first ? Unpooled.EMPTY_BUFFER : cumulation, (ByteBuf) msg);
+                //3. 开始解码工作
                 callDecode(ctx, cumulation, out);
             } catch (DecoderException e) {
                 throw e;
@@ -422,12 +441,14 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      * @param ctx           the {@link ChannelHandlerContext} which this {@link ByteToMessageDecoder} belongs to
      * @param in            the {@link ByteBuf} from which to read data
      * @param out           the {@link List} to which decoded messages should be added
+     *
+     *
      */
     protected void callDecode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         try {
             while (in.isReadable()) {
                 final int outSize = out.size();
-
+                //1. 如果已经解码出对象，则触发下一个 Handler 的读事件，并清空集合，准备下一次读取
                 if (outSize > 0) {
                     fireChannelRead(ctx, out, outSize);
                     out.clear();
@@ -443,6 +464,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                 }
 
                 int oldInputLength = in.readableBytes();
+                //2. 交由子类实现解码
                 decodeRemovalReentryProtection(ctx, in, out);
 
                 // Check if this handler was removed before continuing the loop.
@@ -452,10 +474,14 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                 if (ctx.isRemoved()) {
                     break;
                 }
-
+                //3. 如果没有解码出对象
+                //可以看出，解码器需要遵守 netty 的一些契约，解码器才能正常工作，否则可能会导致错误
+                // && 如果业务解码器认为当前字节缓冲区无法完成业务层的解码，需要对 readIndex 进行复位，告诉 netty 条件不满足，继续读取数据
                 if (out.isEmpty()) {
+                    // 如果子类没有读取任何数据，说明是子类认为这是一个半包的消息，则直接退出循环，需要IO线程继续读取后续的数据报
                     if (oldInputLength == in.readableBytes()) {
                         break;
+                    // 如果子类读取到数据，说明可以解码，则继续下一次循环
                     } else {
                         continue;
                     }
@@ -502,12 +528,15 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      */
     final void decodeRemovalReentryProtection(ChannelHandlerContext ctx, ByteBuf in, List<Object> out)
             throws Exception {
+        //1. 记录当前正在解码
         decodeState = STATE_CALLING_CHILD_DECODE;
         try {
+            //2. 交由子类实现
             decode(ctx, in, out);
         } finally {
             boolean removePending = decodeState == STATE_HANDLER_REMOVED_PENDING;
             decodeState = STATE_INIT;
+            //3. 如果解码过程中, 当前 Handler 被移除，则触发读事件、和 handlerRemove 事件
             if (removePending) {
                 fireChannelRead(ctx, out, out.size());
                 out.clear();
@@ -552,6 +581,8 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
 
     /**
      * Cumulate {@link ByteBuf}s.
+     *
+     *   用于合并多个 ByteBuf
      */
     public interface Cumulator {
         /**

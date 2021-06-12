@@ -44,6 +44,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Abstract base class for {@link Channel} implementations which use a Selector based approach.
+ *
+ *   使用 Selector 方式的 Channel 实现类的抽象基本类
  */
 public abstract class AbstractNioChannel extends AbstractChannel {
 
@@ -234,6 +236,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         @Override
         public final void connect(
                 final SocketAddress remoteAddress, final SocketAddress localAddress, final ChannelPromise promise) {
+            //1. 如果通道状态是未连接，则直接退出
             if (!promise.setUncancellable() || !ensureOpen(promise)) {
                 return;
             }
@@ -250,7 +253,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
                 } else {
                     connectPromise = promise;
                     requestedRemoteAddress = remoteAddress;
-
+                    // 根据超时时长，设置定时任务，如果任务触发时，连接还未完成，则关闭连接句柄，释放资源
                     // Schedule connect timeout.
                     int connectTimeoutMillis = config().getConnectTimeoutMillis();
                     if (connectTimeoutMillis > 0) {
@@ -267,6 +270,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
                         }, connectTimeoutMillis, TimeUnit.MILLISECONDS);
                     }
 
+                    // 设置连接监听器，连接完成时，检测连接是否被取消，如果取消关闭连接
                     promise.addListener(new ChannelFutureListener() {
                         @Override
                         public void operationComplete(ChannelFuture future) throws Exception {
@@ -372,19 +376,26 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         return loop instanceof NioEventLoop;
     }
 
+    /**
+     *  将当前的通道注册到选择器
+     */
     @Override
     protected void doRegister() throws Exception {
         boolean selected = false;
         for (;;) {
             try {
+                // 1. 将通道注册到选择器中， Ops = 0 说明在注册时不对任何事件感兴趣
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {
+                //2. 如果注册返回的 SelectionKey 变得无效，则调用 selectNow() 方法将已经取消的 SelectionKey 从多路复用器
+                // 中删除
                 if (!selected) {
                     // Force the Selector to select now as the "canceled" SelectionKey may still be
                     // cached and not removed because no Select.select(..) operation was called yet.
                     eventLoop().selectNow();
                     selected = true;
+                 //3. 如果仍然无效，则说明我们无法删除失效的 SelectionKey，则直接抛出异常
                 } else {
                     // We forced a select operation on the selector before but the SelectionKey is still cached
                     // for whatever reason. JDK bug ?
@@ -399,6 +410,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         eventLoop().cancel(selectionKey());
     }
 
+    /**
+     *  开始读操作之前的准备工作
+     */
     @Override
     protected void doBeginRead() throws Exception {
         // Channel.read() or ChannelHandlerContext.read() was called
@@ -410,6 +424,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         readPending = true;
 
         final int interestOps = selectionKey.interestOps();
+        // 如果没有设置读操作位，则设置读操作位
         if ((interestOps & readInterestOp) == 0) {
             selectionKey.interestOps(interestOps | readInterestOp);
         }

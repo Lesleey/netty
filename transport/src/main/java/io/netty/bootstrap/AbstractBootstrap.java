@@ -49,6 +49,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>When not used in a {@link ServerBootstrap} context, the {@link #bind()} methods are useful for connectionless
  * transports such as datagram (UDP).</p>
+ *
+ *    启动器: 用于简化通道的启动，它支持使用方法链的方式去提供一个简单的方式去配置启动器
  */
 public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C extends Channel> implements Cloneable {
     @SuppressWarnings("unchecked")
@@ -56,15 +58,24 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     @SuppressWarnings("unchecked")
     private static final Map.Entry<AttributeKey<?>, Object>[] EMPTY_ATTRIBUTE_ARRAY = new Map.Entry[0];
 
+    // 用于处理网络IO事件、用户自定义和定时任务的 Task 的线程池
     volatile EventLoopGroup group;
+
+    // 用于初始化通道对象的工厂
     @SuppressWarnings("deprecation")
     private volatile ChannelFactory<? extends C> channelFactory;
+
     private volatile SocketAddress localAddress;
 
     // The order in which ChannelOptions are applied is important they may depend on each other for validation
     // purposes.
+    // 用来存储针对连接的一些配置项
     private final Map<ChannelOption<?>, Object> options = new LinkedHashMap<ChannelOption<?>, Object>();
+
+    // 用来存储新创建连接的一些初始化属性
     private final Map<AttributeKey<?>, Object> attrs = new ConcurrentHashMap<AttributeKey<?>, Object>();
+
+    // 用来服务 对端请求的处理器 （一般为 SocketChannel 对应的管道中的 Handler）
     private volatile ChannelHandler handler;
 
     AbstractBootstrap() {
@@ -104,6 +115,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * The {@link Class} which is used to create {@link Channel} instances from.
      * You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
      * {@link Channel} implementation has no no-args constructor.
+     *
+     *   设置并绑定通道
+     *   根据提供的参数类型创建通道实例，如果你的通道实现不存在无参构造器时，可以借助 ChannelFactory
      */
     public B channel(Class<? extends C> channelClass) {
         return channelFactory(new ReflectiveChannelFactory<C>(
@@ -139,6 +153,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     /**
      * The {@link SocketAddress} which is used to bind the local "end" to.
+     *
+     *   SoketAddress 被用来绑定本地地址
      */
     public B localAddress(SocketAddress localAddress) {
         this.localAddress = localAddress;
@@ -169,6 +185,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     /**
      * Allow to specify a {@link ChannelOption} which is used for the {@link Channel} instances once they got
      * created. Use a value of {@code null} to remove a previous set {@link ChannelOption}.
+     *
+     *   一旦它们创建出通道实例，该 ChannelOption 会被指定到当前实例
      */
     public <T> B option(ChannelOption<T> option, T value) {
         ObjectUtil.checkNotNull(option, "option");
@@ -221,6 +239,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     /**
      * Create a new {@link Channel} and register it with an {@link EventLoop}.
+     *
+     *   创造一个新的通道并且将它与 EventLoop 进行绑定
      */
     public ChannelFuture register() {
         validate();
@@ -268,18 +288,25 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         return doBind(ObjectUtil.checkNotNull(localAddress, "localAddress"));
     }
 
+    /**
+     *  为套接字绑定地址
+     * @param localAddress
+     * @return
+     */
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        //1. 初始化通道实例，并注册到 eventLoop 中
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
             return regFuture;
         }
-
+        //2. 如果注册任务已完成，进行绑定地址
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
+        //3. 注册任务未完成, 则添加监听器，任务完成之后进行绑定地址
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
@@ -305,9 +332,11 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     final ChannelFuture initAndRegister() {
+        //1. 创建并初始化通道实例
         Channel channel = null;
         try {
             channel = channelFactory.newChannel();
+            // 设置必要的连接参数和自定义的 ChannelHandler
             init(channel);
         } catch (Throwable t) {
             if (channel != null) {
@@ -319,7 +348,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             // as the Channel is not registered yet we need to force the usage of the GlobalEventExecutor
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
-
+        //2. 将通道绑定到事件循环组中，用于处理通道中的网路IO事件和其他任务
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {

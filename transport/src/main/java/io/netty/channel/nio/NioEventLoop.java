@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * {@link SingleThreadEventLoop} implementation which register the {@link Channel}'s to a
  * {@link Selector} and so does the multi-plexing of these in the event loop.
  *
+ *   Reactor 单线程模型
  */
 public final class NioEventLoop extends SingleThreadEventLoop {
 
@@ -431,15 +432,21 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+    /**
+     *   主要逻辑
+     */
     @Override
     protected void run() {
         int selectCnt = 0;
+        // 所有的逻辑操作都在循环体中进行，只有接收到退出指令时，才退出循环
         for (;;) {
             try {
+                //1. 根据 select 策略控制 选择器选择 selectKey 的行为
                 int strategy;
                 try {
                     strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
                     switch (strategy) {
+
                     case SelectStrategy.CONTINUE:
                         continue;
 
@@ -467,6 +474,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 } catch (IOException e) {
                     // If we receive an IOException here its because the Selector is messed up. Let's rebuild
                     // the selector and retry. https://github.com/netty/netty/issues/8566
+                    // 如果此次轮询结果出现异常，则说明遇到了 JDK的 epoll bug, 则重新构建 Selector
                     rebuildSelector0();
                     selectCnt = 0;
                     handleLoopException(e);
@@ -670,8 +678,12 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+    /**
+     *  如果 SelecctionKey 对应的附件为 AbstractNioChannel 表示需要进行IO读写相关的操作
+     */
     private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
         final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
+        //1. 如果 selectionKey 无效，则关闭当前通道
         if (!k.isValid()) {
             final EventLoop eventLoop;
             try {

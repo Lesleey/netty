@@ -20,6 +20,8 @@ import java.util.EventListener;
 /**
  * Listens to the result of a {@link Future}.  The result of the asynchronous operation is notified once this listener
  * is added by calling {@link Future#addListener(GenericFutureListener)}.
+ *
+ *      监听 Future 的记过，异步操作的结果将会通知 被 addListener 方法添加的监听器
  */
 public interface GenericFutureListener<F extends Future<?>> extends EventListener {
 

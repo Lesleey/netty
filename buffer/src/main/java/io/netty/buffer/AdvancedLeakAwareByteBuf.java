@@ -33,6 +33,9 @@ import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 import java.nio.charset.Charset;
 
+/**
+ *   记录ByteBuf的所有操作
+ */
 final class AdvancedLeakAwareByteBuf extends SimpleLeakAwareByteBuf {
 
     private static final String PROP_ACQUIRE_AND_RELEASE_ONLY = "io.netty.leakDetection.acquireAndReleaseOnly";

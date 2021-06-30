@@ -23,6 +23,9 @@ import io.netty.util.internal.UnstableApi;
 
 import java.util.concurrent.TimeUnit;
 
+/*
+ *  某些方法需要传入 Promise 参数，而我们又不希望得到方法的执行结果，可以使用该实例
+ */
 @UnstableApi
 public final class VoidChannelPromise extends AbstractFuture<Void> implements ChannelPromise {
 

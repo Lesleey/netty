@@ -30,6 +30,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Abstract base class for {@link EventExecutor} implementations.
+ *
+ *   EventExecutor 实现类的抽象基类
  */
 public abstract class AbstractEventExecutor extends AbstractExecutorService implements EventExecutor {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractEventExecutor.class);
@@ -37,7 +39,9 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
     static final long DEFAULT_SHUTDOWN_QUIET_PERIOD = 2;
     static final long DEFAULT_SHUTDOWN_TIMEOUT = 15;
 
+    // 所属的事件执行器组
     private final EventExecutorGroup parent;
+    // 只包含数组，用来 {@link #iterator()}
     private final Collection<EventExecutor> selfCollection = Collections.<EventExecutor>singleton(this);
 
     protected AbstractEventExecutor() {

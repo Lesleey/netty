@@ -45,8 +45,10 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
  * A virtual buffer which shows multiple buffers as a single merged buffer.  It is recommended to use
  * {@link ByteBufAllocator#compositeBuffer()} or {@link Unpooled#wrappedBuffer(ByteBuf...)} instead of calling the
  * constructor explicitly.
- *    一个虚拟的缓冲区，展示多个缓冲区为一个单一的缓冲区，形成一个统一的视图，
- *    todo lesleey CompositeByteBuf
+ *    一个虚拟的缓冲区，展示多个缓冲区为一个单一的缓冲区，形成一个统一的视图.
+ *    主要是组合多个ByteBuf, 对外提供统一的 readIndex 和 writeIndex, 由于它只是对ByteBuf 进行组装，并没有对其进行拷贝
+ *    因此也属于 netty 零拷贝的一种。
+ *      由于半包和粘包问题，需要多次读取数据, 使用该字节容器可以很好的解决数据拷贝问题
  */
 public class CompositeByteBuf extends AbstractReferenceCountedByteBuf implements Iterable<ByteBuf> {
 
@@ -278,13 +280,18 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf implements
 
     /**
      * Precondition is that {@code buffer != null}.
+     *
+     *   向组合视图中添加新 ByteBuf
+     * @param increaseWriterIndex
+     * @param buffer  被添加到组合视图中的缓冲区
+     * @param cIndex  缓冲区放置的索引位置
      */
     private int addComponent0(boolean increaseWriterIndex, int cIndex, ByteBuf buffer) {
         assert buffer != null;
         boolean wasAdded = false;
         try {
             checkComponentIndex(cIndex);
-
+            //1. 根据 buffer 构建组件
             // No need to consolidate - just add a component to the list.
             Component c = newComponent(ensureAccessible(buffer), 0);
             int readableBytes = c.length();
@@ -293,13 +300,17 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf implements
             // See https://github.com/netty/netty/issues/10194
             checkForOverflow(capacity(), readableBytes);
 
+            //2. 将组件添加到数组中的指定位置
             addComp(cIndex, c);
             wasAdded = true;
+
+            //3. 更改组件的位置信息
             if (readableBytes > 0 && cIndex < componentCount - 1) {
                 updateComponentOffsets(cIndex);
             } else if (cIndex > 0) {
                 c.reposition(components[cIndex - 1].endOffset);
             }
+            //4. 更新组合缓冲区的 writeIndex
             if (increaseWriterIndex) {
                 writerIndex += readableBytes;
             }
@@ -940,9 +951,15 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf implements
         return components[cIndex].offset;
     }
 
+    /*
+     *
+     *  读取组合索引
+     */
     @Override
     public byte getByte(int index) {
+        //1. 获取该索引所在的组件
         Component c = findComponent(index);
+        //2. 从索引中读取数据
         return c.buf.getByte(c.idx(index));
     }
 
@@ -1581,13 +1598,18 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf implements
     // weak cache - check it first when looking for component
     private Component lastAccessed;
 
+    /*
+     *  根据读取的位置获取实际存储数据的 组件
+     */
     private Component findComponent(int offset) {
+        //1. 大多数情况下都是顺序读取，所以首先查看该索引对应的数据是否在上次读取的组件中
         Component la = lastAccessed;
         if (la != null && offset >= la.offset && offset < la.endOffset) {
            ensureAccessible();
            return la;
         }
         checkIndex(offset);
+        //2. 搜索 offset 所在的组件
         return findIt(offset);
     }
 
@@ -1599,6 +1621,9 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf implements
         return findIt(offset);
     }
 
+    /*
+     *  使用二分查找法查询对应的组件
+     */
     private Component findIt(int offset) {
         for (int low = 0, high = componentCount; low <= high;) {
             int mid = low + high >>> 1;
@@ -1877,8 +1902,9 @@ public class CompositeByteBuf extends AbstractReferenceCountedByteBuf implements
         return result + ", components=" + componentCount + ')';
     }
 
+
     private static final class Component {
-        // 最初添加的缓冲区
+        // 原缓冲区
         final ByteBuf srcBuf; // the originally added buffer
         final ByteBuf buf; // srcBuf unwrapped zero or more times
 

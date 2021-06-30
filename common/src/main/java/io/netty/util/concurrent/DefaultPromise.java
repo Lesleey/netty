@@ -32,13 +32,17 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
+
 public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(DefaultPromise.class);
     private static final InternalLogger rejectedExecutionLogger =
             InternalLoggerFactory.getInstance(DefaultPromise.class.getName() + ".rejectedExecution");
+
+    // 可以嵌套的 Listener 的最大深度
     private static final int MAX_LISTENER_STACK_DEPTH = Math.min(8,
             SystemPropertyUtil.getInt("io.netty.defaultPromise.maxListenerStackDepth", 8));
     @SuppressWarnings("rawtypes")
+    // 用于原子更新 result 字段
     private static final AtomicReferenceFieldUpdater<DefaultPromise, Object> RESULT_UPDATER =
             AtomicReferenceFieldUpdater.newUpdater(DefaultPromise.class, Object.class, "result");
     private static final Object SUCCESS = new Object();
@@ -47,13 +51,17 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
             StacklessCancellationException.newInstance(DefaultPromise.class, "cancel(...)"));
     private static final StackTraceElement[] CANCELLATION_STACK = CANCELLATION_CAUSE_HOLDER.cause.getStackTrace();
 
+    // 异步操作结果
     private volatile Object result;
+
     private final EventExecutor executor;
     /**
      * One or more listeners. Can be a {@link GenericFutureListener} or a {@link DefaultFutureListeners}.
      * If {@code null}, it means either 1) no listeners were added yet or 2) all listeners were notified.
      *
      * Threading - synchronized(this). We must support adding listeners when there is no EventExecutor.
+     *
+     *   监听器
      */
     private Object listeners;
     /**
@@ -64,6 +72,8 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     /**
      * Threading - synchronized(this). We must prevent concurrent notification and FIFO listener notification if the
      * executor changes.
+     *
+     *   标识符: 表明是否有线程处于通知流程中
      */
     private boolean notifyingListeners;
 
@@ -175,11 +185,11 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     @Override
     public Promise<V> addListener(GenericFutureListener<? extends Future<? super V>> listener) {
         checkNotNull(listener, "listener");
-
+        //1. 同步添加监听器
         synchronized (this) {
             addListener0(listener);
         }
-
+        //2. 如果操作完成，通知所有的监听器
         if (isDone()) {
             notifyListeners();
         }
@@ -236,6 +246,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 
     @Override
     public Promise<V> await() throws InterruptedException {
+        //1. 如果操作已完成，则直接返回
         if (isDone()) {
             return this;
         }
@@ -243,9 +254,9 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         if (Thread.interrupted()) {
             throw new InterruptedException(toString());
         }
-
+        //2. 检测死锁，如果设置结果的线程和等待结果的线程为同一个，则会造成死锁
         checkDeadLock();
-
+        //3. 等待
         synchronized (this) {
             while (!isDone()) {
                 incWaiters();
@@ -471,6 +482,8 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
      * @param eventExecutor the executor to use to notify the listener {@code listener}.
      * @param future the future that is complete.
      * @param listener the listener to notify.
+     *
+     *      当操作完成时，通知监听器
      */
     protected static void notifyListener(
             EventExecutor eventExecutor, final Future<?> future, final GenericFutureListener<?> listener) {
@@ -480,22 +493,30 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
                 checkNotNull(listener, "listener"));
     }
 
+    /*
+     *  通知所有的监听器
+     */
     private void notifyListeners() {
         EventExecutor executor = executor();
+        // 如果在同一线程中
         if (executor.inEventLoop()) {
             final InternalThreadLocalMap threadLocals = InternalThreadLocalMap.get();
+            //1. 获取嵌套层数
             final int stackDepth = threadLocals.futureListenerStackDepth();
             if (stackDepth < MAX_LISTENER_STACK_DEPTH) {
+                //2. 执行前增加嵌套层数深度
                 threadLocals.setFutureListenerStackDepth(stackDepth + 1);
                 try {
+                    //3. 通知所有的监听器
                     notifyListenersNow();
                 } finally {
+                    //4. 执行完毕减小嵌套层数深度
                     threadLocals.setFutureListenerStackDepth(stackDepth);
                 }
                 return;
             }
         }
-
+        // 如果在不同线程中，则交由 executor 对应的线程处理
         safeExecute(executor, new Runnable() {
             @Override
             public void run() {
@@ -536,6 +557,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 
     private void notifyListenersNow() {
         Object listeners;
+        //1. 同步获取当前监听器快照, 并设置成员变量监听器为 null， 避免重复通知
         synchronized (this) {
             // Only proceed if there are listeners to notify and we are not already notifying listeners.
             if (notifyingListeners || this.listeners == null) {
@@ -545,12 +567,14 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
             listeners = this.listeners;
             this.listeners = null;
         }
+        //2. 通知所有的监听器
         for (;;) {
             if (listeners instanceof DefaultFutureListeners) {
                 notifyListeners0((DefaultFutureListeners) listeners);
             } else {
                 notifyListener0(this, (GenericFutureListener<?>) listeners);
             }
+            //3. 如果通知过程中，有新添加的监听器，则继续通知
             synchronized (this) {
                 if (this.listeners == null) {
                     // Nothing can throw from within this method, so setting notifyingListeners back to false does not
@@ -609,10 +633,16 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         return setValue0(new CauseHolder(checkNotNull(cause, "cause")));
     }
 
+    /*
+     *  设置操作结果
+     */
     private boolean setValue0(Object objResult) {
+        // 如果操作未完成或者未取消，则设置操作结果
         if (RESULT_UPDATER.compareAndSet(this, null, objResult) ||
             RESULT_UPDATER.compareAndSet(this, UNCANCELLABLE, objResult)) {
+            // 如果有阻塞在获取结果的线程，则唤醒
             if (checkNotifyWaiters()) {
+                // 通知所有的监听器
                 notifyListeners();
             }
             return true;

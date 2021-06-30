@@ -28,6 +28,8 @@ import static io.netty.util.concurrent.AbstractEventExecutor.*;
 
 /**
  * Abstract base class for {@link EventExecutorGroup} implementations.
+ *
+ *    EventExecutorGroup 的抽象基类，所有的方法都会委托给 next() 方法返回的 EventExecutor 执行
  */
 public abstract class AbstractEventExecutorGroup implements EventExecutorGroup {
     @Override

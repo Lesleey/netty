@@ -61,21 +61,29 @@ public class ResourceLeakDetector<T> {
     public enum Level {
         /**
          * Disables resource leak detection.
+         *
+         *   禁止资源泄露检测
          */
         DISABLED,
         /**
          * Enables simplistic sampling resource leak detection which reports there is a leak or not,
          * at the cost of small overhead (default).
+         *
+         *     （默认）以少量的开销为代价, 以取样的资源泄露检测报告是否出现资源泄露
          */
         SIMPLE,
         /**
          * Enables advanced sampling resource leak detection which reports where the leaked object was accessed
          * recently at the cost of high overhead.
+         *
+         *     在高开销为代价, 会报告资源泄露对象的调用栈信息
          */
         ADVANCED,
         /**
          * Enables paranoid resource leak detection which reports where the leaked object was accessed recently,
          * at the cost of the highest possible overhead (for testing purposes only).
+         *
+         *   100% 采集
          */
         PARANOID;
 
@@ -245,13 +253,18 @@ public class ResourceLeakDetector<T> {
         return track0(obj);
     }
 
+    /**
+     *  根据追踪级别为 {@code obj} 创建内存泄露追踪器
+     */
     @SuppressWarnings("unchecked")
     private DefaultResourceLeak track0(T obj) {
         Level level = ResourceLeakDetector.level;
+        //1. 不检测，不采集
         if (level == Level.DISABLED) {
             return null;
         }
 
+        //2. (取样)获取随机数，如果为 0 报告泄露并采集
         if (level.ordinal() < Level.PARANOID.ordinal()) {
             if ((PlatformDependent.threadLocalRandom().nextInt(samplingInterval)) == 0) {
                 reportLeak();
@@ -259,7 +272,9 @@ public class ResourceLeakDetector<T> {
             }
             return null;
         }
+        //3. 报告泄露并采集
         reportLeak();
+        //4. 包装 obj
         return new DefaultResourceLeak(obj, refQueue, allLeaks);
     }
 
@@ -284,22 +299,25 @@ public class ResourceLeakDetector<T> {
     }
 
     private void reportLeak() {
+        //1. 如果没有开启内存泄露报告，清空引用队列并返回
         if (!needReport()) {
             clearRefQueue();
             return;
         }
 
         // Detect and report previous leaks.
+        //2. 检测和报告之前的内存泄露情况
         for (;;) {
+            //2.1 如果引用队列为空，则直接退出
             DefaultResourceLeak ref = (DefaultResourceLeak) refQueue.poll();
             if (ref == null) {
                 break;
             }
-
+            //2.2 若未泄露，开始下一次循环
             if (!ref.dispose()) {
                 continue;
             }
-
+            //2.3 报告追踪信息
             String records = ref.toString();
             if (reportedLeaks.add(records)) {
                 if (records.isEmpty()) {
@@ -447,8 +465,13 @@ public class ResourceLeakDetector<T> {
             }
         }
 
+        /**
+         *   判断是否泄露
+         */
         boolean dispose() {
+            //1. 清理对资源对象的访问
             clear();
+            //2. 若引用缓存中还存在此引用，但是弱引用队列中存在该对象, 则说明 ByteBuf 未释放，存在内存泄露
             return allLeaks.remove(this);
         }
 

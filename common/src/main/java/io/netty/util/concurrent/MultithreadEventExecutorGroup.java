@@ -29,13 +29,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Abstract base class for {@link EventExecutorGroup} implementations that handles their tasks with multiple threads at
  * the same time.
+ *
+ *   EventExecutorGroup 实现类的抽象基类: 可以在同一时刻使用多线程处理它们的任务
  */
 public abstract class MultithreadEventExecutorGroup extends AbstractEventExecutorGroup {
 
+    // 执行任务的 EventExecutor
     private final EventExecutor[] children;
     private final Set<EventExecutor> readonlyChildren;
+    // 已终止的 EventExecutor 数量
     private final AtomicInteger terminatedChildren = new AtomicInteger();
+    // 用于终止 EventExecutor 的 Future
     private final Promise<?> terminationFuture = new DefaultPromise(GlobalEventExecutor.INSTANCE);
+    // EventExecutorChooser 用来选择此次执行任务的 EventExecutor
     private final EventExecutorChooserFactory.EventExecutorChooser chooser;
 
     /**
@@ -75,7 +81,7 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
         if (executor == null) {
             executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
         }
-
+        //1. 根据线程数量创建 EventExcutor 数组
         children = new EventExecutor[nThreads];
 
         for (int i = 0; i < nThreads; i ++) {
@@ -87,7 +93,9 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                 // TODO: Think about if this is a good exception type
                 throw new IllegalStateException("failed to create a child event loop", e);
             } finally {
+                // 如果创建失败, 关闭已创建的所有的执行器
                 if (!success) {
+                    // 确保所有已经创建的执行器已关闭
                     for (int j = 0; j < i; j ++) {
                         children[j].shutdownGracefully();
                     }
@@ -107,8 +115,9 @@ public abstract class MultithreadEventExecutorGroup extends AbstractEventExecuto
                 }
             }
         }
-
+        //2. 根据选择策略获取选择器，用来获取当前通道所使用的 EventExecutor
         chooser = chooserFactory.newChooser(children);
+
 
         final FutureListener<Object> terminationListener = new FutureListener<Object>() {
             @Override

@@ -17,6 +17,9 @@ package io.netty.util.concurrent;
 
 import io.netty.util.internal.ObjectUtil;
 
+/*
+ *  ThreadLocal 在线程池环境中有内存泄露的风险, 所以 netty 对线程进行了封装
+ */
 final class FastThreadLocalRunnable implements Runnable {
     private final Runnable runnable;
 
@@ -29,6 +32,7 @@ final class FastThreadLocalRunnable implements Runnable {
         try {
             runnable.run();
         } finally {
+            // 移除当前线程对应的所有的 ThreadLocal 避免内存泄露
             FastThreadLocal.removeAll();
         }
     }

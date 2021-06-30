@@ -25,6 +25,10 @@ final class DefaultSelectStrategy implements SelectStrategy {
 
     private DefaultSelectStrategy() { }
 
+    /**
+     *    select() 的策略
+     *    如果当前有需要执行的任务: 则执行 selectNow(), 否则执行 select()
+     */
     @Override
     public int calculateStrategy(IntSupplier selectSupplier, boolean hasTasks) throws Exception {
         return hasTasks ? selectSupplier.get() : SelectStrategy.SELECT;

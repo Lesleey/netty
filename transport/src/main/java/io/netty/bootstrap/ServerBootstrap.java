@@ -42,6 +42,11 @@ import java.util.concurrent.TimeUnit;
  * {@link Bootstrap} sub-class which allows easy bootstrap of {@link ServerChannel}
  *
  *    用来简化服务端 ServerChannel 的启动
+ *       1. 设置通道的基本属性 (事件循环组、子通道的事件处理器和连接参数)
+ *       2. 初始化通道 (ServerSocketChannel)
+ *          （1）设置通道的基本属性（连接参数）
+ *           (2) 向通道对应的 ChannelPiple 添加自定义的事件处理器
+ *           (3) 向事件处理器链末尾增加 ServerBootstrapAcceptor 用来处理客户端的连接
  */
 public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerChannel> {
 
@@ -213,7 +218,6 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             // not be able to load the class because of the file limit it already reached.
             //
             // See https://github.com/netty/netty/issues/1328
-            // todo 用于开启自动阅读
             enableAutoReadTask = new Runnable() {
                 @Override
                 public void run() {
@@ -222,16 +226,20 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             };
         }
 
+        /**
+         *  处理新连接，并构建子通道（以及对应的管道）
+         */
         @Override
         @SuppressWarnings("unchecked")
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
+
             final Channel child = (Channel) msg;
-
+            //1. 向子通道 (ServerSocketChannel.accept() 获取的通道) 的管道中添加自定义的事件处理器
             child.pipeline().addLast(childHandler);
-
+            //2. 设置通道相关的参数
             setChannelOptions(child, childOptions, logger);
             setAttributes(child, childAttrs);
-
+            //3. 将该通道注册到事件循环组中（由事件循环组处理子通道的io 事件）
             try {
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override

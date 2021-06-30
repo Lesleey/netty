@@ -21,6 +21,10 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
+/*
+ *  netty 对 SelectioinKey 集合做的优化，在 java.nio 中，监听到就绪事件的 SelectionKey 是存放在 Set 中的，所以在最坏情况下
+ *   时间复杂度会变为 O(n) 所以用数组代替
+ */
 final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
     SelectionKey[] keys;

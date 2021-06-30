@@ -36,11 +36,16 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
         ResourceLeakDetector.addExclusions(AbstractByteBufAllocator.class, "toLeakAwareBuffer");
     }
 
+    /**
+     *  ByteBuf 被分配完成之后，交由内存泄露检测器处理，并包装返回。
+     */
     protected static ByteBuf toLeakAwareBuffer(ByteBuf buf) {
         ResourceLeakTracker<ByteBuf> leak;
         switch (ResourceLeakDetector.getLevel()) {
             case SIMPLE:
+                //1. 每种类型的资源都会创建一个内存泄露追踪器，通过内存泄露追踪器获取弱引用
                 leak = AbstractByteBuf.leakDetector.track(buf);
+                //2. 如果弱引用不为空，说明该 Buf 被采集了，则包装返回
                 if (leak != null) {
                     buf = new SimpleLeakAwareByteBuf(buf, leak);
                 }

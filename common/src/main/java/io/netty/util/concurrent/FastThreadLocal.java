@@ -40,6 +40,13 @@ import java.util.Set;
  *
  * @param <V> the type of the thread-local variable
  * @see ThreadLocal
+ *
+ *   ThreadLocal 的变种，具有高访问的性能, 内部使用常量索引来代替 hash 去寻找变量, 当访问非常频繁时，他是非常有用的。
+ *   注意: 只有线程为 FastThreadLocalThread 或者及其子类时,该类才会起作用。任何其他种类的线程都会退化成普通的 TheadLocal
+ *
+ *      区别
+ *          1. ThreadLocal 通过哈希算法（开放地址法）获取当前线程 Thread 对应的 Value
+ *          2. FastThreadLocal 中存储 Value 对应的下标, 然后通过 FastThreadLocalThread 中存储所有 Value 的数组获取当前对应的值
  */
 public class FastThreadLocal<V> {
 
@@ -121,7 +128,7 @@ public class FastThreadLocal<V> {
         Set<FastThreadLocal<?>> variablesToRemove = (Set<FastThreadLocal<?>>) v;
         variablesToRemove.remove(variable);
     }
-
+    // 当前 ThreadLocal 对应值的下标
     private final int index;
 
     public FastThreadLocal() {
@@ -186,6 +193,8 @@ public class FastThreadLocal<V> {
 
     /**
      * Set the value for the current thread.
+     *
+     *    为当前线程设置值
      */
     public final void set(V value) {
         if (value != InternalThreadLocalMap.UNSET) {

@@ -15,6 +15,9 @@
  */
 package io.netty.channel;
 
+/*
+ *  入站调用者: 用来触发入站相关的事件，并获取调用链者下一个 ChannelInboundInvoker
+ */
 public interface ChannelInboundInvoker {
 
     /**

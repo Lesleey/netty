@@ -51,6 +51,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * transports such as datagram (UDP).</p>
  *
  *    启动器: 用于简化通道的启动，它支持使用方法链的方式去提供一个简单的方式去配置启动器
+ *      启动器包括两个实现 ServerBootstrap 和 Bootstrap , 分别用来启动服务端和客户端。
+ *      AbstractBootstrap 抽象类将抽取了具体实现类的公共部分:
+ *          1. 设置公共的基本属性，用来初始化通道 (事件循环组、通道工厂、绑定的套接字、通道连接的参数、自定义的初始化属性、自定义的时间处理器)
+ *          2. 构建 Channel 实例, 并使用模板方法初始化通道实例, 将通道绑定到事件循环组中，并注册到 Selector 中
+ *          3. 绑定本地端口(套接字)
+ *
  */
 public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C extends Channel> implements Cloneable {
     @SuppressWarnings("unchecked")

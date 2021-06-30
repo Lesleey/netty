@@ -28,6 +28,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Abstract base class for {@link EventExecutor}s that want to support scheduling.
+ *
+ *    支持定时任务的抽象基类
  */
 public abstract class AbstractScheduledEventExecutor extends AbstractEventExecutor {
     private static final Comparator<ScheduledFutureTask<?>> SCHEDULED_FUTURE_TASK_COMPARATOR =
@@ -42,9 +44,9 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
        @Override
        public void run() { } // Do nothing
     };
-
+    // 存放定时任务的任务队列
     PriorityQueue<ScheduledFutureTask<?>> scheduledTaskQueue;
-
+    // 任务的唯一标识
     long nextTaskId;
 
     protected AbstractScheduledEventExecutor() {
@@ -122,6 +124,8 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
     /**
      * Return the {@link Runnable} which is ready to be executed with the given {@code nanoTime}.
      * You should use {@link #nanoTime()} to retrieve the correct {@code nanoTime}.
+     *
+     *    获取在指定的时刻需要被执行的定时任务
      */
     protected final Runnable pollScheduledTask(long nanoTime) {
         assert inEventLoop();

@@ -22,6 +22,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * Schedules {@link TimerTask}s for one-time future execution in a background
  * thread.
+ *
+ *     使用后台线程一次性执行 TimerTask
  */
 public interface Timer {
 
@@ -34,6 +36,8 @@ public interface Timer {
      * @throws IllegalStateException       if this timer has been {@linkplain #stop() stopped} already
      * @throws RejectedExecutionException if the pending timeouts are too many and creating new timeout
      *                                    can cause instability in the system.
+     *
+     *    在指定的延迟时间之后，执行给定的 TimerTask
      */
     Timeout newTimeout(TimerTask task, long delay, TimeUnit unit);
 
@@ -43,6 +47,8 @@ public interface Timer {
      *
      * @return the handles associated with the tasks which were canceled by
      *         this method
+     *
+     *    释放 Timer 持有的所有的资源，并且取消所有调度但还没有执行的任务
      */
     Set<Timeout> stop();
 }

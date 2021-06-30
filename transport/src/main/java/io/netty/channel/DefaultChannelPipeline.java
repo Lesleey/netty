@@ -42,6 +42,10 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 /**
  * The default {@link ChannelPipeline} implementation.  It is usually created
  * by a {@link Channel} implementation when the {@link Channel} is created.
+ *
+ *   默认的 {@link ChannelPipeline} 实现类, 当通道被创建时，由通道进行初始化
+ *
+ *
  */
 public class DefaultChannelPipeline implements ChannelPipeline {
 
@@ -61,9 +65,12 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     private static final AtomicReferenceFieldUpdater<DefaultChannelPipeline, MessageSizeEstimator.Handle> ESTIMATOR =
             AtomicReferenceFieldUpdater.newUpdater(
                     DefaultChannelPipeline.class, MessageSizeEstimator.Handle.class, "estimatorHandle");
-    final AbstractChannelHandlerContext head;
-    final AbstractChannelHandlerContext tail;
 
+    // 管道的头结点
+    final AbstractChannelHandlerContext head;
+    // 管道的尾节点
+    final AbstractChannelHandlerContext tail;
+    // 管道所属的通道
     private final Channel channel;
     private final ChannelFuture succeededFuture;
     private final VoidChannelPromise voidPromise;
@@ -202,19 +209,24 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         return addLast(null, name, handler);
     }
 
+    /*
+     * 向管道中添加自定义的处理器
+     */
     @Override
     public final ChannelPipeline addLast(EventExecutorGroup group, String name, ChannelHandler handler) {
         final AbstractChannelHandlerContext newCtx;
+        // 加锁
         synchronized (this) {
+            //1. 处理器如没有指明，则无法共享
             checkMultiplicity(handler);
-
+            //2. 构建 处理器上下文, 并添加到处理器链中
             newCtx = newContext(group, filterName(name, handler), handler);
-
             addLast0(newCtx);
 
             // If the registered is false it means that the channel was not registered on an eventLoop yet.
             // In this case we add the context to the pipeline and add a task that will call
             // ChannelHandler.handlerAdded(...) once the channel is registered.
+            // pipeline 暂未注册，将任务添加任务挂起，当通道被注册时，将会执行这些挂起的任务
             if (!registered) {
                 newCtx.setAddPending();
                 callHandlerCallbackLater(newCtx, true);
@@ -227,6 +239,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                 return this;
             }
         }
+        //3. 触发 ChannelHandler 的 addHandler 事件
         callHandlerAdded0(newCtx);
         return this;
     }
@@ -611,6 +624,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    /*
+     *
+     */
     private void callHandlerAdded0(final AbstractChannelHandlerContext ctx) {
         try {
             ctx.callHandlerAdded();
@@ -1250,6 +1266,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     }
 
     // A special catch-all handler that handles both bytes and messages.
+    /*
+     * 管道的尾节点,
+     */
     final class TailContext extends AbstractChannelHandlerContext implements ChannelInboundHandler {
 
         TailContext(DefaultChannelPipeline pipeline) {
@@ -1310,6 +1329,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         }
     }
 
+    /*
+     *  管道的头节点，用来与对端系统进行交互, 实际的工作都是由 unsafe 完成
+     */
     final class HeadContext extends AbstractChannelHandlerContext
             implements ChannelOutboundHandler, ChannelInboundHandler {
 

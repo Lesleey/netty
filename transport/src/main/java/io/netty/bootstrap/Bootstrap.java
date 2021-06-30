@@ -44,6 +44,9 @@ import java.net.SocketAddress;
  * For regular TCP connections, please use the provided {@link #connect()} methods.</p>
  *
  *   用于便捷的启动客户端
+ *      1. 初始化 Channel: 设置连接参数, 向 ChannelPiple 中添加自定义的事件处理器 Handler
+ *      2. 连接服务端: 连接服务端，并触发管道的fireChannelActive 事件
+ *
  */
 public class Bootstrap extends AbstractBootstrap<Bootstrap, Channel> {
 

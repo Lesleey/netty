@@ -40,7 +40,7 @@ import static io.netty.channel.internal.ChannelUtils.WRITE_STATUS_SNDBUF_FULL;
 /**
  * {@link AbstractNioChannel} base class for {@link Channel}s that operate on bytes.
  *
- *  直接操作字节的通道抽象类
+ *  直接操作字节的通道抽象类, 发送和读取的对象是 ByteBuf 和 FileRegion
  */
 public abstract class AbstractNioByteChannel extends AbstractNioChannel {
     private static final ChannelMetadata METADATA = new ChannelMetadata(false, 16);
@@ -48,6 +48,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             " (expected: " + StringUtil.simpleClassName(ByteBuf.class) + ", " +
             StringUtil.simpleClassName(FileRegion.class) + ')';
 
+    // 负责刷新缓冲区中的数据到 Socket 中
     private final Runnable flushTask = new Runnable() {
         @Override
         public void run() {
@@ -252,6 +253,9 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
         return WRITE_STATUS_SNDBUF_FULL;
     }
 
+    /*
+     *  循环发送缓冲区中的数据到 Socket 中
+     */
     @Override
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
 
@@ -270,7 +274,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             }
             writeSpinCount -= doWriteInternal(in, msg);
         } while (writeSpinCount > 0);
-
+        //3. 如果缓冲区中的数据未发送完成, 则继续监听写就绪事件， 等待下一次写入
         incompleteWrite(writeSpinCount < 0);
     }
 
@@ -301,7 +305,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
         //1. 如果没有写完成（半包），则（如果必要的话）设置写操作位
         if (setOpWrite) {
             setOpWrite();
-        //2. 如果写完成，清除写操作位，并刷新缓冲区
+        //2. 如果写完成（或者超过写次数），清除写操作位, 将刷新任务提交给线程池，等待下一次写;
         } else {
             // It is possible that we have set the write OP, woken up by NIO because the socket is writable, and then
             // use our write quantum. In this case we no longer want to set the write OP because the socket is still

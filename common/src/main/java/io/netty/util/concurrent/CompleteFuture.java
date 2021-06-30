@@ -22,6 +22,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * A skeletal {@link Future} implementation which represents a {@link Future} which has been completed already.
+ *
+ *   代表操作已经完成
  */
 public abstract class CompleteFuture<V> extends AbstractFuture<V> {
 
@@ -43,6 +45,9 @@ public abstract class CompleteFuture<V> extends AbstractFuture<V> {
         return executor;
     }
 
+    /*
+     *  由于这是一个完成的 Future 则直接通知添加的监听器执行回调
+     */
     @Override
     public Future<V> addListener(GenericFutureListener<? extends Future<? super V>> listener) {
         DefaultPromise.notifyListener(executor(), this, ObjectUtil.checkNotNull(listener, "listener"));

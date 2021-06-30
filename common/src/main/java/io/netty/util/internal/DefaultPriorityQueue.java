@@ -27,6 +27,9 @@ import static io.netty.util.internal.PriorityQueueNode.INDEX_NOT_IN_QUEUE;
  * A priority queue which uses natural ordering of elements. Elements are also required to be of type
  * {@link PriorityQueueNode} for the purpose of maintaining the index in the priority queue.
  * @param <T> The object that is maintained in the queue.
+ *
+ *      使用元素自然排序的优先级队列, 队列中的元素必须为 {@link PriorityQueueNode} 类型为了在优先队列中获取索引
+ *       （最小堆）
  */
 public final class DefaultPriorityQueue<T extends PriorityQueueNode> extends AbstractQueue<T>
                                                                      implements PriorityQueue<T> {

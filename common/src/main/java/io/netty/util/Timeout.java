@@ -18,6 +18,8 @@ package io.netty.util;
 /**
  * A handle associated with a {@link TimerTask} that is returned by a
  * {@link Timer}.
+ *
+ *   关联定时任务的句柄: 可以获取定时任务的状态
  */
 public interface Timeout {
 

@@ -15,6 +15,9 @@
  */
 package io.netty.util;
 
+/**
+ *  资源泄露追踪器: 用来追踪（记录）调用栈
+ */
 public interface ResourceLeakTracker<T>  {
 
     /**

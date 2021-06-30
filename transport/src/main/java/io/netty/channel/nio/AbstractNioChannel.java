@@ -51,8 +51,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
     private static final InternalLogger logger =
             InternalLoggerFactory.getInstance(AbstractNioChannel.class);
-
+    // 真正用到的 nio channel
     private final SelectableChannel ch;
+    // 当前通道注册的感兴趣的事件
     protected final int readInterestOp;
     volatile SelectionKey selectionKey;
     boolean readPending;
@@ -242,12 +243,14 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             }
 
             try {
+                //2. 确保没有正在进行的连接
                 if (connectPromise != null) {
                     // Already a connect in process.
                     throw new ConnectionPendingException();
                 }
 
                 boolean wasActive = isActive();
+                // 3. 尝试连接操作
                 if (doConnect(remoteAddress, localAddress)) {
                     fulfillConnectPromise(promise, wasActive);
                 } else {
@@ -290,6 +293,12 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             }
         }
 
+        /*
+         *  连接成功
+         *      1. 如果已经取消连接，则关闭连接
+         *      2. 设置连接的结果
+         *      3. 触发管道的 fireChannelActive 事件。
+         */
         private void fulfillConnectPromise(ChannelPromise promise, boolean wasActive) {
             if (promise == null) {
                 // Closed via cancellation and the promise has been notified already.

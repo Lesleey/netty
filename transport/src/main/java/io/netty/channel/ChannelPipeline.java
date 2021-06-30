@@ -219,10 +219,9 @@ import java.util.NoSuchElementException;
  * For example, you can insert an encryption handler when sensitive information is about to be exchanged, and remove it
  * after the exchange.
  *
- *      netty 对 channel的数据管道的抽象，消息在 ChannelPiple 进行流动, 通常包含了自定义 ChannelHandler链表，来对流入或者流出的数据进行处理，
+ *      netty 对 channel的数据管道的抽象，消息在 ChannelPipeline 进行流动, 通常包含了自定义 ChannelHandler链表，来对流入或者流出的数据进行处理，
  *   可以方便的新增和删除自定义的 ChannelHandler 实现不同的业务逻辑定制，不需对已有的 ChannelHandler 进行修改，满足开闭原则。
  *      通道并不直接进行IO事件，而是作为调度者。负责对发生的IO事件进行调度和传播
- *
  *
  */
 public interface ChannelPipeline
